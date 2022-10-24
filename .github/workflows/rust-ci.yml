@@ -24,3 +24,19 @@ jobs:
           key: ""
 
       - run: cargo build --release --all-features
+
+  doc:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: ""
+          key: ""
+
+      - run: cargo doc --no-deps
