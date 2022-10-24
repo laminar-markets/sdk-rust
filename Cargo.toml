@@ -1,0 +1,28 @@
+[package]
+name = "laminar-sdk"
+version = "0.1.0"
+edition = "2021"
+categories = ["crypto", "defi", "trading", "sdk"]
+license = "MIT OR Apache-2.0"
+readme = "README.md"
+description = "SDK for interacting with Laminar Markets on Aptos"
+homepage = "https://laminar.markets"
+repository = "https://github.com/laminar-markets/sdk"
+keywords = ["aptos", "laminar", "dex", "clob", "sdk", "blockchain"]
+
+[dependencies]
+anyhow = { version = "1.0.62" }
+aptos-api-types = { git = "https://github.com/laminar-markets/aptos-core", branch = "laminar" }
+aptos-sdk = { git = "https://github.com/laminar-markets/aptos-core", branch = "laminar" }
+arbitrary = { version = "1.1.6", optional = true, features = ["derive"] }
+hex = { version = "0.4.3" }
+reqwest = { version = "0.11.11" }
+serde = { version = "1.0.145", features = ["derive"] }
+serde_json = { version = "1.0.85" }
+serde_yaml = { version = "0.9.10" }
+
+[features]
+fuzzing = [
+    "arbitrary"
+]
+db = []
