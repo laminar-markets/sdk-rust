@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"enum":[["LaminarEvent",""]],"struct":[["AmendOrderEvent",""],["CancelOrderEvent",""],["CreateOrderBookEvent",""],["FillEvent",""],["PlaceOrderEvent",""],["TypeInfo",""]]};
