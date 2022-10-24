@@ -20,7 +20,7 @@ env:
 
 jobs:
   build:
-    runs-on: markets-runner
+    runs-on: ubuntu-runner
     steps:
       - uses: actions/checkout@v2
       - uses: actions-rs/toolchain@v1
