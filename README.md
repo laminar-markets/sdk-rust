@@ -11,7 +11,12 @@ Include the following in your `Cargo.toml`
 laminar-sdk = { version = "1.0.0" }
 ```
 
-## Usage/Examples
+## Usage
+
+The following environment variables need to be set:
+
+- `APTOS_NODE_URL`: REST API url of a given Aptos Node.
+- `DEX_ACCOUNT_ADDRESS`: Laminar Markets dex account address.
 
 To initialize a `LaminarClient`:
 ```rust
