@@ -33,23 +33,19 @@ jobs:
 
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout source code
-        uses: actions/checkout@v2
+      - uses: actions/checkout@v2
         with:
           persist-credentials: false
 
-      - name: Install Rust
-        uses: actions-rs/toolchain@v1
+      - run: rustup toolchain install stable --profile minimal
+
+      - uses: Swatinem/rust-cache@v2
         with:
-          profile: minimal
-          toolchain: nightly
-          override: true
+          shared-key: ""
+          key: ""
 
       - name: Build documentation
-        uses: actions-rs/cargo@v1
-        with:
-          command: doc
-          args: --verbose --no-deps --all-features
+        run: cargo doc --verbose --no-deps --all-features
 
       - name: Finalize documentation
         run: |
