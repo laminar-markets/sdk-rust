@@ -43,7 +43,7 @@ pub async fn create_laminar_client() -> Result<LaminarClient, anyhow::Error> {
 
 ## Documentation
 
-[Documentation](https://linktodocumentation)
+[Documentation](https://laminar-markets.github.io/sdk-rust/laminar_sdk/)
 
 ## Support
 
