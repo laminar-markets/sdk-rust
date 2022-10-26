@@ -35,7 +35,7 @@ impl FromStr for Id {
     type Err = anyhow::Error;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let (num, addr) = s
+        let (addr, num) = s
             .split_once(':')
             .ok_or_else(|| anyhow!("invalid ID string"))?;
         Ok(Self {

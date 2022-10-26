@@ -161,10 +161,10 @@ impl<'de> Deserialize<'de> for TypeInfo {
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct CreateOrderBookEvent {
+    pub book_id: Id,
     pub creator: AccountAddress,
     pub base: TypeInfo,
     pub quote: TypeInfo,
-    pub book_id: Id,
     pub price_decimals: u8,
     pub size_decimals: u8,
     #[serde(deserialize_with = "deserialize_from_str")]
