@@ -26,3 +26,6 @@ fuzzing = [
     "arbitrary"
 ]
 db = []
+
+[lib]
+path = "src/lib.rs"
