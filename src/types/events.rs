@@ -1,5 +1,5 @@
-use crate::types::deserialize_from_str;
 use crate::types::order::Id;
+use crate::types::{deserialize_from_str, u64_to_str};
 use crate::{Side, TimeInForce};
 use anyhow::anyhow;
 use aptos_sdk::move_types::identifier::Identifier;
@@ -167,11 +167,17 @@ pub struct CreateOrderBookEvent {
     pub quote: TypeInfo,
     pub price_decimals: u8,
     pub size_decimals: u8,
-    #[serde(deserialize_with = "deserialize_from_str")]
+    #[serde(
+        deserialize_with = "deserialize_from_str",
+        serialize_with = "u64_to_str"
+    )]
     pub min_size_amount: u64,
     pub base_decimals: u8,
     pub quote_decimals: u8,
-    #[serde(deserialize_with = "deserialize_from_str")]
+    #[serde(
+        deserialize_with = "deserialize_from_str",
+        serialize_with = "u64_to_str"
+    )]
     pub time: u64,
 }
 
@@ -186,13 +192,22 @@ pub struct PlaceOrderEvent {
     pub book_id: Id,
     pub order_id: Id,
     pub side: Side,
-    #[serde(deserialize_with = "deserialize_from_str")]
+    #[serde(
+        deserialize_with = "deserialize_from_str",
+        serialize_with = "u64_to_str"
+    )]
     pub price: u64,
-    #[serde(deserialize_with = "deserialize_from_str")]
+    #[serde(
+        deserialize_with = "deserialize_from_str",
+        serialize_with = "u64_to_str"
+    )]
     pub size: u64,
     pub time_in_force: TimeInForce,
     pub post_only: bool,
-    #[serde(deserialize_with = "deserialize_from_str")]
+    #[serde(
+        deserialize_with = "deserialize_from_str",
+        serialize_with = "u64_to_str"
+    )]
     pub time: u64,
 }
 
@@ -208,11 +223,20 @@ pub struct AmendOrderEvent {
     pub order_id: Id,
     pub amend_id: Id,
     pub side: Side,
-    #[serde(deserialize_with = "deserialize_from_str")]
+    #[serde(
+        deserialize_with = "deserialize_from_str",
+        serialize_with = "u64_to_str"
+    )]
     pub price: u64,
-    #[serde(deserialize_with = "deserialize_from_str")]
+    #[serde(
+        deserialize_with = "deserialize_from_str",
+        serialize_with = "u64_to_str"
+    )]
     pub size: u64,
-    #[serde(deserialize_with = "deserialize_from_str")]
+    #[serde(
+        deserialize_with = "deserialize_from_str",
+        serialize_with = "u64_to_str"
+    )]
     pub time: u64,
 }
 
@@ -230,7 +254,10 @@ pub struct CancelOrderEvent {
     pub side: Side,
     // TODO change reason to enum
     pub reason: u8,
-    #[serde(deserialize_with = "deserialize_from_str")]
+    #[serde(
+        deserialize_with = "deserialize_from_str",
+        serialize_with = "u64_to_str"
+    )]
     pub time: u64,
 }
 
@@ -245,17 +272,35 @@ pub struct FillEvent {
     pub book_id: Id,
     pub order_id: Id,
     pub side: Side,
-    #[serde(deserialize_with = "deserialize_from_str")]
+    #[serde(
+        deserialize_with = "deserialize_from_str",
+        serialize_with = "u64_to_str"
+    )]
     pub price: u64,
-    #[serde(deserialize_with = "deserialize_from_str")]
+    #[serde(
+        deserialize_with = "deserialize_from_str",
+        serialize_with = "u64_to_str"
+    )]
     pub fill_size: u64,
-    #[serde(deserialize_with = "deserialize_from_str")]
+    #[serde(
+        deserialize_with = "deserialize_from_str",
+        serialize_with = "u64_to_str"
+    )]
     pub fee: u64,
-    #[serde(deserialize_with = "deserialize_from_str")]
+    #[serde(
+        deserialize_with = "deserialize_from_str",
+        serialize_with = "u64_to_str"
+    )]
     pub fee_rate: u64,
-    #[serde(deserialize_with = "deserialize_from_str")]
+    #[serde(
+        deserialize_with = "deserialize_from_str",
+        serialize_with = "u64_to_str"
+    )]
     pub time: u64,
-    #[serde(deserialize_with = "deserialize_from_str")]
+    #[serde(
+        deserialize_with = "deserialize_from_str",
+        serialize_with = "u64_to_str"
+    )]
     pub remaining_size: u64,
     pub is_maker: bool,
 }
