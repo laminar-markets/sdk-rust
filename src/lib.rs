@@ -646,7 +646,7 @@ impl LaminarClient {
             .iter()
             .find(|e| order_id == &e.order_id)
             .cloned()
-            .ok_or_else(|| anyhow!("order not found"))
+            .context("order not found")
     }
 
     /// Fetch all amend order events for this client's account for a given book.
