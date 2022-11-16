@@ -1,8 +1,7 @@
 use crate::types::deserialize_from_str;
 use crate::types::events::FillEvent;
 #[cfg(feature = "db")]
-use anyhow::anyhow;
-use anyhow::Context;
+use anyhow::{anyhow, Context};
 use aptos_api_types::{Address, U64};
 use aptos_sdk::move_types::language_storage::TypeTag;
 use aptos_sdk::types::account_address::AccountAddress;
