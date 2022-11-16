@@ -1,7 +1,7 @@
 use crate::types::order::Id;
 use crate::types::{deserialize_from_str, u64_to_str};
 use crate::{Side, TimeInForce};
-use anyhow::anyhow;
+use anyhow::Context;
 use aptos_sdk::move_types::identifier::Identifier;
 use aptos_sdk::move_types::language_storage::{StructTag, TypeTag};
 use aptos_sdk::types::account_address::AccountAddress;
@@ -37,13 +37,10 @@ impl FromStr for TypeInfo {
     type Err = anyhow::Error;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let (addr, rest) = s
-            .split_once("::")
-            .ok_or_else(|| anyhow!("failed splitting typeinfo"))?;
+        let (addr, rest) = s.split_once("::").context("failed splitting typeinfo")?;
         let addr = AccountAddress::from_hex_literal(addr)?;
-        let (module_name, struct_name) = rest
-            .split_once("::")
-            .ok_or_else(|| anyhow!("failed splitting typeinfo"))?;
+        let (module_name, struct_name) =
+            rest.split_once("::").context("failed splitting typeinfo")?;
         Ok(Self {
             account_address: addr,
             module_name: module_name.to_string(),

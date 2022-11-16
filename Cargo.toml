@@ -1,6 +1,6 @@
 [package]
 name = "laminar-sdk"
-version = "1.0.1"
+version = "1.1.0"
 edition = "2021"
 categories = ["crypto", "defi", "trading", "sdk"]
 license = "MIT OR Apache-2.0"
@@ -15,6 +15,7 @@ anyhow = { version = "1.0.62" }
 aptos-api-types = { git = "https://github.com/laminar-markets/aptos-core", branch = "laminar" }
 aptos-sdk = { git = "https://github.com/laminar-markets/aptos-core", branch = "laminar" }
 arbitrary = { version = "1.1.6", optional = true, features = ["derive"] }
+futures = "0.3.24"
 hex = { version = "0.4.3" }
 reqwest = { version = "0.11.11" }
 serde = { version = "1.0.145", features = ["derive"] }
