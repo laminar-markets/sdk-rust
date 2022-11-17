@@ -1,7 +1,7 @@
 use crate::types::deserialize_from_str;
 use crate::types::events::FillEvent;
 #[cfg(feature = "db")]
-use anyhow::anyhow;
+use anyhow::{anyhow, Context};
 use aptos_api_types::{Address, U64};
 use aptos_sdk::move_types::language_storage::TypeTag;
 use aptos_sdk::types::account_address::AccountAddress;
@@ -35,9 +35,7 @@ impl FromStr for Id {
     type Err = anyhow::Error;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let (num, addr) = s
-            .split_once(':')
-            .ok_or_else(|| anyhow!("invalid ID string"))?;
+        let (addr, num) = s.split_once(':').context("invalid ID string")?;
         Ok(Self {
             creation_num: U64::from(num.parse::<u64>()?),
             addr: addr.parse()?,

@@ -5,7 +5,7 @@ use crate::types::events::{
     LaminarEvent, PlaceOrderEvent,
 };
 use crate::types::order::{Id, Order, OrderBook, Side, State, TimeInForce};
-use anyhow::anyhow;
+use anyhow::{anyhow, Context};
 use aptos_api_types::{
     AptosErrorCode, MoveModuleId, MoveType, Transaction, TransactionInfo, UserTransactionRequest,
     U64,
@@ -17,12 +17,13 @@ use aptos_sdk::move_types::ident_str;
 use aptos_sdk::move_types::language_storage::{ModuleId, TypeTag};
 use aptos_sdk::rest_client::aptos::Balance;
 use aptos_sdk::rest_client::error::RestError;
-use aptos_sdk::rest_client::Client;
+use aptos_sdk::rest_client::{Client, Resource};
 use aptos_sdk::transaction_builder::TransactionFactory;
 use aptos_sdk::types::account_address::AccountAddress;
 use aptos_sdk::types::chain_id::ChainId;
 use aptos_sdk::types::transaction::EntryFunction;
 use aptos_sdk::types::{AccountKey, LocalAccount};
+use futures::try_join;
 use reqwest::Url;
 use serde::de::DeserializeOwned;
 use serde::Deserialize;
@@ -85,11 +86,12 @@ impl LaminarClient {
         mut account: LocalAccount,
     ) -> Result<Self, anyhow::Error> {
         let aptos_client = Client::new(node_url);
-        let index = aptos_client.get_index().await?;
-        let index = index.inner();
+        let index = aptos_client.get_index().await?.into_inner();
         let chain_id = ChainId::new(index.chain_id);
-        let account_info = aptos_client.get_account(account.address()).await?;
-        let account_info = account_info.inner();
+        let account_info = aptos_client
+            .get_account(account.address())
+            .await?
+            .into_inner();
         let seq_num = account_info.sequence_number;
         let acc_seq_num = account.sequence_number_mut();
         *acc_seq_num = seq_num;
@@ -173,8 +175,7 @@ impl LaminarClient {
     /// If the aptos team pushes out a new node deployment, the chain id may change.
     /// In case of a change the internal chain id needs to be updated
     pub async fn update_chain_id(&mut self) -> Result<(), anyhow::Error> {
-        let index = self.aptos_client.get_index().await?;
-        let index = index.inner();
+        let index = self.aptos_client.get_index().await?.into_inner();
         let chain_id = ChainId::new(index.chain_id);
         self.chain_id = chain_id;
         Ok(())
@@ -182,32 +183,48 @@ impl LaminarClient {
 
     // TODO doc strings for these functions
     pub async fn get_sequence_number(&self) -> Result<u64, anyhow::Error> {
-        let account = self
-            .aptos_client
+        self.aptos_client
             .get_account(self.account.address())
-            .await?
-            .into_inner();
-        Ok(account.sequence_number)
+            .await
+            .with_context(|| {
+                format!(
+                    "failed getting account: {}",
+                    self.account.address().to_hex_literal()
+                )
+            })
+            .map(|a| a.inner().sequence_number)
+    }
+
+    async fn fetch_resource(
+        &self,
+        address: AccountAddress,
+        resource: &str,
+    ) -> Result<Option<Resource>, anyhow::Error> {
+        self.aptos_client
+            .get_account_resource(address, resource)
+            .await
+            .with_context(|| {
+                format!(
+                    "failed getting resource: {} for account: {}",
+                    resource,
+                    address.to_hex_literal()
+                )
+            })
+            .map(|a| a.into_inner())
     }
 
     pub async fn does_coin_exist(&self, coin: &TypeTag) -> Result<bool, anyhow::Error> {
         let coin_info = format!("0x1::coin::CoinInfo<{}>", coin);
-        let res = self
-            .aptos_client
-            .get_account_resource(self.account.address(), &coin_info)
-            .await?
-            .into_inner();
-        Ok(res.is_some())
+        self.fetch_resource(self.account.address(), &coin_info)
+            .await
+            .map(|r| r.is_some())
     }
 
     pub async fn is_registered_for_coin(&self, coin: &TypeTag) -> Result<bool, anyhow::Error> {
         let coin_store = format!("0x1::coin::CoinStore<{}>", coin);
-        let res = self
-            .aptos_client
-            .get_account_resource(self.account.address(), &coin_store)
-            .await?
-            .into_inner();
-        Ok(res.is_some())
+        self.fetch_resource(self.account.address(), &coin_store)
+            .await
+            .map(|r| r.is_some())
     }
 
     pub fn register_for_coin(coin: &TypeTag) -> Result<EntryFunction, anyhow::Error> {
@@ -223,16 +240,13 @@ impl LaminarClient {
 
     pub async fn get_coin_balance(&self, coin: &TypeTag) -> Result<U64, anyhow::Error> {
         let coin_store = format!("0x1::coin::CoinStore<{}>", coin);
-        let resp = self
-            .aptos_client
-            .get_account_resource(self.account.address(), &coin_store)
-            .await?;
-        let resp = resp
-            .inner()
-            .as_ref()
-            .ok_or_else(|| anyhow!("could not find CoinStore"))?;
-        let balance = serde_json::from_value::<Balance>(resp.data.clone())?;
-        Ok(balance.coin.value)
+        self.fetch_resource(self.account.address(), &coin_store)
+            .await?
+            .with_context(|| format!("user is not registered for coin: {}", &coin_store))
+            .and_then(|r| {
+                serde_json::from_value::<Balance>(r.data).context("failed deserializing balance")
+            })
+            .map(|b| b.coin.value)
     }
 
     /// Create payload for this client's account to be registered to trade on Laminar
@@ -309,15 +323,12 @@ impl LaminarClient {
         quote: &TypeTag,
         book_owner: &AccountAddress,
     ) -> Result<OrderBook, anyhow::Error> {
-        let mut bids_book = self
-            .fetch_orderbook_side(self.get_book_bids_type(base, quote), book_owner)
-            .await?;
-        let OrderBook { asks, .. } = self
-            .fetch_orderbook_side(self.get_book_asks_type(base, quote), book_owner)
-            .await?;
-
-        bids_book.asks = asks;
-        Ok(bids_book)
+        let bids = self.fetch_orderbook_side(self.get_book_bids_type(base, quote), book_owner);
+        let asks = self.fetch_orderbook_side(self.get_book_asks_type(base, quote), book_owner);
+        try_join!(bids, asks).map(|(mut b, a)| {
+            b.asks = a.asks;
+            b
+        })
     }
 
     async fn fetch_orderbook_side(
@@ -325,30 +336,28 @@ impl LaminarClient {
         book_type: String,
         book_owner: &AccountAddress,
     ) -> Result<OrderBook, anyhow::Error> {
-        let res = self
-            .aptos_client
-            .get_account_resource(*book_owner, &book_type)
-            .await?;
-        if let Some(res) = res.inner() {
-            let mut book = serde_json::from_value::<OrderBook>(res.data.clone())?;
-            let types = res.resource_type.type_params.clone();
-            book.type_tags.extend(types);
-            Ok(book)
-        } else {
-            Err(anyhow!("book not found"))
-        }
+        self.fetch_resource(*book_owner, &book_type)
+            .await?
+            .context("book not found")
+            .and_then(
+                |Resource {
+                     data,
+                     resource_type,
+                 }| {
+                    let mut book = serde_json::from_value::<OrderBook>(data)?;
+                    let types = resource_type.type_params;
+                    book.type_tags.extend(types);
+                    Ok(book)
+                },
+            )
     }
 
     /// Checks if account using this client is eligible to trade on Laminar
     pub async fn is_user_registered(&self) -> Result<bool, anyhow::Error> {
         let event_store_type = format!("{}::book::OrderBookStore", self.laminar.to_hex_literal(),);
-
-        let res = self
-            .aptos_client
-            .get_account_resource(self.account.address(), &event_store_type)
-            .await?
-            .into_inner();
-        Ok(res.is_some())
+        self.fetch_resource(self.account.address(), &event_store_type)
+            .await
+            .map(|r| r.is_some())
     }
 
     /// Create payload for placing a limit order.
@@ -507,49 +516,41 @@ impl LaminarClient {
         let signed_tx = self.account.sign_transaction(tx);
         let pending = match self.aptos_client.submit(&signed_tx).await {
             Ok(res) => res.into_inner(),
-            Err(e) => {
-                return if let RestError::Api(a) = e {
-                    match a.error.error_code {
-                        AptosErrorCode::InvalidTransactionUpdate
-                        | AptosErrorCode::SequenceNumberTooOld
-                        | AptosErrorCode::VmError => {
-                            let seq_num = self.get_sequence_number().await?;
-                            let acc_seq_num = self.account.sequence_number_mut();
-                            *acc_seq_num = max(seq_num, *acc_seq_num + 1);
-                            Err(anyhow!(a))
-                        }
-                        _ => Err(anyhow!(a)),
+            Err(RestError::Api(a)) => {
+                return match a.error.error_code {
+                    AptosErrorCode::InvalidTransactionUpdate
+                    | AptosErrorCode::SequenceNumberTooOld
+                    | AptosErrorCode::VmError => {
+                        let seq_num = self.get_sequence_number().await?;
+                        let acc_seq_num = self.account.sequence_number_mut();
+                        *acc_seq_num = max(seq_num, *acc_seq_num + 1);
+                        Err(anyhow!(a))
                     }
-                } else {
-                    Err(anyhow!(e))
+                    _ => Err(anyhow!(a)),
                 }
             }
+            Err(e) => return Err(anyhow!(e)),
         };
 
-        let tx = self.aptos_client.wait_for_transaction(&pending).await?;
-        if let Transaction::UserTransaction(ut) = tx.inner() {
-            let events = ut
-                .events
-                .iter()
-                .filter(|e| {
-                    if let MoveType::Struct(s) = &e.typ {
-                        s.address.inner() == self.laminar()
-                    } else {
-                        false
-                    }
-                })
-                .map(|e| serde_json::from_value(e.data.clone()))
-                .collect::<Result<Vec<LaminarEvent>, serde_json::Error>>()?;
+        let Transaction::UserTransaction(ut) = self.aptos_client.wait_for_transaction(&pending).await?.into_inner() else {
+            return Err(anyhow!("not a user transaction"))
+        };
 
-            Ok(LaminarTransaction {
-                info: ut.info.clone(),
-                request: ut.request.clone(),
-                events,
-                timestamp: ut.timestamp,
-            })
-        } else {
-            Err(anyhow!("not a user transaction"))
-        }
+        let events = ut
+            .events
+            .iter()
+            .filter(
+                |e| matches!(&e.typ, MoveType::Struct(s) if s.address.inner() == self.laminar()),
+            )
+            .map(|e| serde_json::from_value(e.data.clone()).context("failed deserializing event"))
+            .collect::<Result<Vec<LaminarEvent>, anyhow::Error>>()?;
+
+        Ok(LaminarTransaction {
+            info: ut.info.clone(),
+            request: ut.request.clone(),
+            events,
+            timestamp: ut.timestamp,
+        })
     }
 
     /// Utility method for building and submitting a tx
@@ -564,11 +565,8 @@ impl LaminarClient {
         for i in 0..SUBMIT_ATTEMPTS {
             match self.submit_tx(payload.clone()).await {
                 Ok(lt) => return Ok(lt),
-                Err(e) => {
-                    if i == SUBMIT_ATTEMPTS - 1 {
-                        return Err(e);
-                    };
-                }
+                Err(e) if i == SUBMIT_ATTEMPTS - 1 => return Err(e),
+                _ => continue,
             }
         }
 
@@ -580,8 +578,7 @@ impl LaminarClient {
         T: EventStoreField<'a> + DeserializeOwned,
     {
         let event_store = format!("{}::book::OrderBookStore", self.laminar.to_hex_literal(),);
-        let events = self
-            .aptos_client
+        self.aptos_client
             .get_account_events(
                 self.account.address(),
                 &event_store,
@@ -589,14 +586,18 @@ impl LaminarClient {
                 None,
                 None,
             )
-            .await?;
-        let result = events
-            .inner()
-            .iter()
-            .map(|e| serde_json::from_value(e.clone().data))
-            .collect::<Result<Vec<T>, serde_json::Error>>()?;
-
-        Ok(result)
+            .await
+            .with_context(|| {
+                format!(
+                    "failed getting event type: {} for account: {}",
+                    T::event_store_field(),
+                    self.account.address()
+                )
+            })?
+            .into_inner()
+            .into_iter()
+            .map(|e| serde_json::from_value(e.data).context("failed deserializing event"))
+            .collect()
     }
 
     async fn get_filtered_dex_events<'a, E, P>(&self, predicate: P) -> Result<Vec<E>, anyhow::Error>
@@ -645,7 +646,7 @@ impl LaminarClient {
             .iter()
             .find(|e| order_id == &e.order_id)
             .cloned()
-            .ok_or_else(|| anyhow!("order not found"))
+            .context("order not found")
     }
 
     /// Fetch all amend order events for this client's account for a given book.
@@ -761,9 +762,9 @@ impl LaminarClient {
             None => (place_event.price, place_event.size),
         };
 
-        let remaining_size = fills.last().map_or(0, |f| f.remaining_size);
-
-        let state = if remaining_size == 0 || cancel_event.is_some() {
+        let state = if !matches!(place_event.time_in_force, TimeInForce::GoodTillCanceled)
+            || cancel_event.is_some()
+        {
             State::Closed
         } else if !fills.is_empty() {
             State::PartiallyFilled
@@ -771,6 +772,7 @@ impl LaminarClient {
             State::Open
         };
 
+        let remaining_size = fills.last().map_or(0, |f| f.remaining_size);
         let o = Order {
             id: order_id.clone(),
             side: place_event.side,
