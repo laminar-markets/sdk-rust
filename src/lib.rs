@@ -215,7 +215,11 @@ impl LaminarClient {
 
     pub async fn does_coin_exist(&self, coin: &TypeTag) -> Result<bool, anyhow::Error> {
         let coin_info = format!("0x1::coin::CoinInfo<{}>", coin);
-        self.fetch_resource(self.account.address(), &coin_info)
+        let TypeTag::Struct(tag) = coin else {
+            return Err(anyhow!("failed extracting coin typetag"))
+        };
+
+        self.fetch_resource(tag.address, &coin_info)
             .await
             .map(|r| r.is_some())
     }
