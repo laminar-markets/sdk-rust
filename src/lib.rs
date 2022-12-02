@@ -704,10 +704,7 @@ impl LaminarClient {
     /// # Arguments:
     ///
     /// * `book_id` - `OrderBook` Id.
-    pub async fn fetch_all_fill_events(
-        &self,
-        book_id: &Id,
-    ) -> Result<Vec<FillEvent>> {
+    pub async fn fetch_all_fill_events(&self, book_id: &Id) -> Result<Vec<FillEvent>> {
         let filter = |e: &FillEvent| &e.book_id == book_id;
         self.get_filtered_dex_events(filter).await
     }
