@@ -5,7 +5,7 @@ use crate::types::events::{
     LaminarEvent, PlaceOrderEvent,
 };
 use crate::types::order::{Id, Order, OrderBook, Side, State, TimeInForce};
-use anyhow::{anyhow, Context};
+use anyhow::{anyhow, Context, Result};
 use aptos_api_types::{
     AptosErrorCode, MoveModuleId, MoveType, Transaction, TransactionInfo, UserTransactionRequest,
     U64,
@@ -174,7 +174,7 @@ impl LaminarClient {
     /// Update the laminar clients aptos chain id.
     /// If the aptos team pushes out a new node deployment, the chain id may change.
     /// In case of a change the internal chain id needs to be updated
-    pub async fn update_chain_id(&mut self) -> Result<(), anyhow::Error> {
+    pub async fn update_chain_id(&mut self) -> Result<()> {
         let index = self.aptos_client.get_index().await?.into_inner();
         let chain_id = ChainId::new(index.chain_id);
         self.chain_id = chain_id;
@@ -182,7 +182,7 @@ impl LaminarClient {
     }
 
     // TODO doc strings for these functions
-    pub async fn get_sequence_number(&self) -> Result<u64, anyhow::Error> {
+    pub async fn get_sequence_number(&self) -> Result<u64> {
         self.aptos_client
             .get_account(self.account.address())
             .await
@@ -199,7 +199,7 @@ impl LaminarClient {
         &self,
         address: AccountAddress,
         resource: &str,
-    ) -> Result<Option<Resource>, anyhow::Error> {
+    ) -> Result<Option<Resource>> {
         self.aptos_client
             .get_account_resource(address, resource)
             .await
@@ -213,7 +213,7 @@ impl LaminarClient {
             .map(|a| a.into_inner())
     }
 
-    pub async fn does_coin_exist(&self, coin: &TypeTag) -> Result<bool, anyhow::Error> {
+    pub async fn does_coin_exist(&self, coin: &TypeTag) -> Result<bool> {
         let coin_info = format!("0x1::coin::CoinInfo<{}>", coin);
         let TypeTag::Struct(tag) = coin else {
             return Err(anyhow!("failed extracting coin typetag"))
@@ -224,14 +224,14 @@ impl LaminarClient {
             .map(|r| r.is_some())
     }
 
-    pub async fn is_registered_for_coin(&self, coin: &TypeTag) -> Result<bool, anyhow::Error> {
+    pub async fn is_registered_for_coin(&self, coin: &TypeTag) -> Result<bool> {
         let coin_store = format!("0x1::coin::CoinStore<{}>", coin);
         self.fetch_resource(self.account.address(), &coin_store)
             .await
             .map(|r| r.is_some())
     }
 
-    pub fn register_for_coin(coin: &TypeTag) -> Result<EntryFunction, anyhow::Error> {
+    pub fn register_for_coin(coin: &TypeTag) -> Result<EntryFunction> {
         let entry = EntryFunction::new(
             ModuleId::from(MoveModuleId::from_str("0x1::managed_coin")?),
             ident_str!("register").to_owned(),
@@ -242,7 +242,7 @@ impl LaminarClient {
         Ok(entry)
     }
 
-    pub async fn get_coin_balance(&self, coin: &TypeTag) -> Result<U64, anyhow::Error> {
+    pub async fn get_coin_balance(&self, coin: &TypeTag) -> Result<U64> {
         let coin_store = format!("0x1::coin::CoinStore<{}>", coin);
         self.fetch_resource(self.account.address(), &coin_store)
             .await?
@@ -281,7 +281,7 @@ impl LaminarClient {
         price_decimals: u8,
         size_decimals: u8,
         min_size_amount: u64,
-    ) -> Result<EntryFunction, anyhow::Error> {
+    ) -> Result<EntryFunction> {
         let entry = EntryFunction::new(
             ModuleId::new(self.laminar, ident_str!("book").to_owned()),
             ident_str!("create_orderbook").to_owned(),
@@ -326,7 +326,7 @@ impl LaminarClient {
         base: &TypeTag,
         quote: &TypeTag,
         book_owner: &AccountAddress,
-    ) -> Result<OrderBook, anyhow::Error> {
+    ) -> Result<OrderBook> {
         let bids = self.fetch_orderbook_side(self.get_book_bids_type(base, quote), book_owner);
         let asks = self.fetch_orderbook_side(self.get_book_asks_type(base, quote), book_owner);
         try_join!(bids, asks).map(|(mut b, a)| {
@@ -339,7 +339,7 @@ impl LaminarClient {
         &self,
         book_type: String,
         book_owner: &AccountAddress,
-    ) -> Result<OrderBook, anyhow::Error> {
+    ) -> Result<OrderBook> {
         self.fetch_resource(*book_owner, &book_type)
             .await?
             .context("book not found")
@@ -357,7 +357,7 @@ impl LaminarClient {
     }
 
     /// Checks if account using this client is eligible to trade on Laminar
-    pub async fn is_user_registered(&self) -> Result<bool, anyhow::Error> {
+    pub async fn is_user_registered(&self) -> Result<bool> {
         let event_store_type = format!("{}::book::OrderBookStore", self.laminar.to_hex_literal(),);
         self.fetch_resource(self.account.address(), &event_store_type)
             .await
@@ -387,7 +387,7 @@ impl LaminarClient {
         size: u64,
         time_in_force: TimeInForce,
         post_only: bool,
-    ) -> Result<EntryFunction, anyhow::Error> {
+    ) -> Result<EntryFunction> {
         let entry = EntryFunction::new(
             ModuleId::new(self.laminar, ident_str!("book").to_owned()),
             ident_str!("place_limit_order").to_owned(),
@@ -421,7 +421,7 @@ impl LaminarClient {
         book_owner: &AccountAddress,
         side: Side,
         size: u64,
-    ) -> Result<EntryFunction, anyhow::Error> {
+    ) -> Result<EntryFunction> {
         let entry = EntryFunction::new(
             ModuleId::new(self.laminar, ident_str!("book").to_owned()),
             ident_str!("place_market_order").to_owned(),
@@ -457,7 +457,7 @@ impl LaminarClient {
         side: Side,
         price: u64,
         size: u64,
-    ) -> Result<EntryFunction, anyhow::Error> {
+    ) -> Result<EntryFunction> {
         let entry = EntryFunction::new(
             ModuleId::new(self.laminar, ident_str!("book").to_owned()),
             ident_str!("amend_order").to_owned(),
@@ -490,7 +490,7 @@ impl LaminarClient {
         book_owner: &AccountAddress,
         order_id: &Id,
         side: Side,
-    ) -> Result<EntryFunction, anyhow::Error> {
+    ) -> Result<EntryFunction> {
         let entry = EntryFunction::new(
             ModuleId::new(self.laminar, ident_str!("book").to_owned()),
             ident_str!("cancel_order").to_owned(),
@@ -505,10 +505,7 @@ impl LaminarClient {
         Ok(entry)
     }
 
-    async fn submit_tx(
-        &mut self,
-        payload: EntryFunction,
-    ) -> Result<LaminarTransaction, anyhow::Error> {
+    async fn submit_tx(&mut self, payload: EntryFunction) -> Result<LaminarTransaction> {
         let addr = self.account.address();
         let tx = TransactionFactory::new(self.chain_id)
             .entry_function(payload)
@@ -547,7 +544,7 @@ impl LaminarClient {
                 |e| matches!(&e.typ, MoveType::Struct(s) if s.address.inner() == self.laminar()),
             )
             .map(|e| serde_json::from_value(e.data.clone()).context("failed deserializing event"))
-            .collect::<Result<Vec<LaminarEvent>, anyhow::Error>>()?;
+            .collect::<Result<Vec<LaminarEvent>>>()?;
 
         Ok(LaminarTransaction {
             info: ut.info.clone(),
@@ -565,7 +562,7 @@ impl LaminarClient {
     pub async fn build_and_submit_tx(
         &mut self,
         payload: EntryFunction,
-    ) -> Result<LaminarTransaction, anyhow::Error> {
+    ) -> Result<LaminarTransaction> {
         for i in 0..SUBMIT_ATTEMPTS {
             match self.submit_tx(payload.clone()).await {
                 Ok(lt) => return Ok(lt),
@@ -577,7 +574,7 @@ impl LaminarClient {
         Err(anyhow!("failed submitting tx"))
     }
 
-    async fn get_dex_events<'a, T>(&self) -> Result<Vec<T>, anyhow::Error>
+    async fn get_dex_events<'a, T>(&self) -> Result<Vec<T>>
     where
         T: EventStoreField<'a> + DeserializeOwned,
     {
@@ -604,7 +601,7 @@ impl LaminarClient {
             .collect()
     }
 
-    async fn get_filtered_dex_events<'a, E, P>(&self, predicate: P) -> Result<Vec<E>, anyhow::Error>
+    async fn get_filtered_dex_events<'a, E, P>(&self, predicate: P) -> Result<Vec<E>>
     where
         E: EventStoreField<'a> + DeserializeOwned + Clone + Send,
         P: Send + Fn(&E) -> bool,
@@ -621,7 +618,7 @@ impl LaminarClient {
     }
 
     /// Fetch all order books.
-    pub async fn fetch_order_books(&self) -> Result<Vec<CreateOrderBookEvent>, anyhow::Error> {
+    pub async fn fetch_order_books(&self) -> Result<Vec<CreateOrderBookEvent>> {
         let filter = |_e: &CreateOrderBookEvent| true;
         self.get_filtered_dex_events(filter).await
     }
@@ -631,10 +628,7 @@ impl LaminarClient {
     /// # Arguments:
     ///
     /// * `book_id` - `OrderBook` Id.
-    pub async fn fetch_all_place_events(
-        &self,
-        book_id: &Id,
-    ) -> Result<Vec<PlaceOrderEvent>, anyhow::Error> {
+    pub async fn fetch_all_place_events(&self, book_id: &Id) -> Result<Vec<PlaceOrderEvent>> {
         let filter = |e: &PlaceOrderEvent| &e.book_id == book_id;
         self.get_filtered_dex_events(filter).await
     }
@@ -644,7 +638,7 @@ impl LaminarClient {
     /// # Arguments:
     ///
     /// * `order_id` - ID of order to fetch place event for.
-    pub async fn get_place_event(&self, order_id: &Id) -> Result<PlaceOrderEvent, anyhow::Error> {
+    pub async fn get_place_event(&self, order_id: &Id) -> Result<PlaceOrderEvent> {
         self.get_dex_events::<PlaceOrderEvent>()
             .await?
             .iter()
@@ -658,18 +652,12 @@ impl LaminarClient {
     /// # Arguments:
     ///
     /// * `book_id` - `OrderBook` Id.
-    pub async fn fetch_all_amend_events(
-        &self,
-        book_id: &Id,
-    ) -> Result<Vec<AmendOrderEvent>, anyhow::Error> {
+    pub async fn fetch_all_amend_events(&self, book_id: &Id) -> Result<Vec<AmendOrderEvent>> {
         let filter = |e: &AmendOrderEvent| &e.book_id == book_id;
         self.get_filtered_dex_events(filter).await
     }
 
-    async fn get_amends_internal(
-        &self,
-        order_id: &Id,
-    ) -> Result<Vec<AmendOrderEvent>, anyhow::Error> {
+    async fn get_amends_internal(&self, order_id: &Id) -> Result<Vec<AmendOrderEvent>> {
         let filter = |e: &AmendOrderEvent| order_id == &e.order_id;
         self.get_filtered_dex_events(filter).await
     }
@@ -679,10 +667,7 @@ impl LaminarClient {
     /// # Arguments:
     ///
     /// * `order_id` - ID of order to fetch amend events for.
-    pub async fn get_amend_events(
-        &self,
-        order_id: &Id,
-    ) -> Result<Vec<AmendOrderEvent>, anyhow::Error> {
+    pub async fn get_amend_events(&self, order_id: &Id) -> Result<Vec<AmendOrderEvent>> {
         match self.get_place_event(order_id).await {
             Ok(_) => self.get_amends_internal(order_id).await,
             Err(e) => Err(e),
@@ -694,10 +679,7 @@ impl LaminarClient {
     /// # Arguments:
     ///
     /// * `book_id` - `OrderBook` Id.
-    pub async fn fetch_all_cancel_events(
-        &self,
-        book_id: &Id,
-    ) -> Result<Vec<CancelOrderEvent>, anyhow::Error> {
+    pub async fn fetch_all_cancel_events(&self, book_id: &Id) -> Result<Vec<CancelOrderEvent>> {
         let filter = |e: &CancelOrderEvent| &e.book_id == book_id;
         self.get_filtered_dex_events(filter).await
     }
@@ -707,10 +689,7 @@ impl LaminarClient {
     /// # Arguments:
     ///
     /// * `order_id` - ID of order to fetch cancel event for.
-    pub async fn get_cancel_event(
-        &self,
-        order_id: &Id,
-    ) -> Result<Option<CancelOrderEvent>, anyhow::Error> {
+    pub async fn get_cancel_event(&self, order_id: &Id) -> Result<Option<CancelOrderEvent>> {
         let res = self
             .get_dex_events::<CancelOrderEvent>()
             .await?
@@ -733,7 +712,7 @@ impl LaminarClient {
         self.get_filtered_dex_events(filter).await
     }
 
-    async fn get_fills_internal(&self, order_id: &Id) -> Result<Vec<FillEvent>, anyhow::Error> {
+    async fn get_fills_internal(&self, order_id: &Id) -> Result<Vec<FillEvent>> {
         let filter = |e: &FillEvent| order_id == &e.order_id;
         self.get_filtered_dex_events(filter).await
     }
@@ -743,7 +722,7 @@ impl LaminarClient {
     /// # Arguments:
     ///
     /// * `order_id` - ID of order to fetch fill events for.
-    pub async fn get_fill_events(&self, order_id: &Id) -> Result<Vec<FillEvent>, anyhow::Error> {
+    pub async fn get_fill_events(&self, order_id: &Id) -> Result<Vec<FillEvent>> {
         match self.get_place_event(order_id).await {
             Ok(_) => self.get_fills_internal(order_id).await,
             Err(e) => Err(e),
@@ -755,7 +734,7 @@ impl LaminarClient {
     /// # Arguments:
     ///
     /// * `order_id` - ID of order to fetch fill events for.
-    pub async fn get_order(&self, order_id: &Id) -> Result<Order, anyhow::Error> {
+    pub async fn get_order(&self, order_id: &Id) -> Result<Order> {
         let place_event = self.get_place_event(order_id).await?;
         let amend_events = self.get_amends_internal(order_id).await?;
         let cancel_event = self.get_cancel_event(order_id).await?;
