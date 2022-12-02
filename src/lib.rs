@@ -84,7 +84,7 @@ impl LaminarClient {
         node_url: Url,
         laminar: AccountAddress,
         mut account: LocalAccount,
-    ) -> Result<Self, anyhow::Error> {
+    ) -> Result<Self> {
         let aptos_client = Client::new(node_url);
         let index = aptos_client.get_index().await?.into_inner();
         let chain_id = ChainId::new(index.chain_id);
@@ -123,7 +123,7 @@ impl LaminarClient {
         laminar_address: &str,
         account_address: &str,
         account_private_key: &str,
-    ) -> Result<Self, anyhow::Error> {
+    ) -> Result<Self> {
         let node_url = Url::parse(node_url).expect("node url is not valid");
         let laminar = AccountAddress::from_hex_literal(laminar_address)?;
         let account_address = AccountAddress::from_hex_literal(account_address)?;
@@ -148,7 +148,7 @@ impl LaminarClient {
         laminar_address: &str,
         config_path: &str,
         config_profile_name: &str,
-    ) -> Result<Self, anyhow::Error> {
+    ) -> Result<Self> {
         let config = AptosConfig::from_config(config_path, config_profile_name);
         Self::connect_with_strings(
             node_url,
@@ -707,7 +707,7 @@ impl LaminarClient {
     pub async fn fetch_all_fill_events(
         &self,
         book_id: &Id,
-    ) -> Result<Vec<FillEvent>, anyhow::Error> {
+    ) -> Result<Vec<FillEvent>> {
         let filter = |e: &FillEvent| &e.book_id == book_id;
         self.get_filtered_dex_events(filter).await
     }
