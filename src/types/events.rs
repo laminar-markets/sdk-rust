@@ -59,14 +59,16 @@ impl From<&Box<StructTag>> for TypeInfo {
     }
 }
 
-impl From<TypeInfo> for TypeTag {
-    fn from(s: TypeInfo) -> Self {
-        TypeTag::Struct(Box::new(StructTag {
+impl TryFrom<TypeInfo> for TypeTag {
+    type Error = anyhow::Error;
+
+    fn try_from(s: TypeInfo) -> Result<Self, Self::Error> {
+        Ok(TypeTag::Struct(Box::new(StructTag {
             address: s.account_address,
-            module: Identifier::from_str(&s.module_name).unwrap(),
-            name: Identifier::from_str(&s.struct_name).unwrap(),
+            module: Identifier::from_str(&s.module_name)?,
+            name: Identifier::from_str(&s.struct_name)?,
             type_params: vec![],
-        }))
+        })))
     }
 }
 
