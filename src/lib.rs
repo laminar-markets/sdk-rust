@@ -574,16 +574,17 @@ impl LaminarClient {
         Err(anyhow!("failed submitting tx"))
     }
 
-    async fn get_dex_events<'a, T>(&self) -> Result<Vec<T>>
+    async fn get_dex_events<'a, E>(&self) -> Result<impl Iterator<Item = Result<E>>>
     where
-        T: EventStoreField<'a> + DeserializeOwned,
+        E: EventStoreField<'a> + DeserializeOwned,
     {
         let event_store = format!("{}::book::OrderBookStore", self.laminar.to_hex_literal(),);
-        self.aptos_client
+        let res = self
+            .aptos_client
             .get_account_events(
                 self.account.address(),
                 &event_store,
-                T::event_store_field(),
+                E::event_store_field(),
                 None,
                 None,
             )
@@ -591,36 +592,20 @@ impl LaminarClient {
             .with_context(|| {
                 format!(
                     "failed getting event type: {} for account: {}",
-                    T::event_store_field(),
+                    E::event_store_field(),
                     self.account.address()
                 )
             })?
             .into_inner()
             .into_iter()
-            .map(|e| serde_json::from_value(e.data).context("failed deserializing event"))
-            .collect()
-    }
-
-    async fn get_filtered_dex_events<'a, E, P>(&self, predicate: P) -> Result<Vec<E>>
-    where
-        E: EventStoreField<'a> + DeserializeOwned + Clone + Send,
-        P: Send + Fn(&E) -> bool,
-    {
-        let res = self.get_dex_events::<E>().await?;
-        let mut result: Vec<E> = vec![];
-        for e in &res {
-            if predicate(e) {
-                result.push(e.to_owned());
-            }
-        }
+            .map(|e| serde_json::from_value(e.data).context("failed deserializing event"));
 
         Ok(res)
     }
 
     /// Fetch all order books.
     pub async fn fetch_order_books(&self) -> Result<Vec<CreateOrderBookEvent>> {
-        let filter = |_e: &CreateOrderBookEvent| true;
-        self.get_filtered_dex_events(filter).await
+        self.get_dex_events().await?.collect()
     }
 
     /// Fetch all place order events for this client's account for a given book.
@@ -629,8 +614,16 @@ impl LaminarClient {
     ///
     /// * `book_id` - `OrderBook` Id.
     pub async fn fetch_all_place_events(&self, book_id: &Id) -> Result<Vec<PlaceOrderEvent>> {
-        let filter = |e: &PlaceOrderEvent| &e.book_id == book_id;
-        self.get_filtered_dex_events(filter).await
+        self.get_dex_events()
+            .await?
+            .filter(|e: &Result<PlaceOrderEvent>| {
+                if let Ok(e) = e {
+                    e.book_id == *book_id
+                } else {
+                    false
+                }
+            })
+            .collect()
     }
 
     /// Fetch place order event for a given order ID.
@@ -639,12 +632,16 @@ impl LaminarClient {
     ///
     /// * `order_id` - ID of order to fetch place event for.
     pub async fn get_place_event(&self, order_id: &Id) -> Result<PlaceOrderEvent> {
-        self.get_dex_events::<PlaceOrderEvent>()
+        self.get_dex_events()
             .await?
-            .iter()
-            .find(|e| order_id == &e.order_id)
-            .cloned()
-            .context("order not found")
+            .find(|e: &Result<PlaceOrderEvent>| {
+                if let Ok(e) = e {
+                    e.order_id == *order_id
+                } else {
+                    false
+                }
+            })
+            .with_context(|| format!("failed finding place event for order: {}", order_id))?
     }
 
     /// Fetch all amend order events for this client's account for a given book.
@@ -653,13 +650,29 @@ impl LaminarClient {
     ///
     /// * `book_id` - `OrderBook` Id.
     pub async fn fetch_all_amend_events(&self, book_id: &Id) -> Result<Vec<AmendOrderEvent>> {
-        let filter = |e: &AmendOrderEvent| &e.book_id == book_id;
-        self.get_filtered_dex_events(filter).await
+        self.get_dex_events()
+            .await?
+            .filter(|e: &Result<AmendOrderEvent>| {
+                if let Ok(e) = e {
+                    e.book_id == *book_id
+                } else {
+                    false
+                }
+            })
+            .collect()
     }
 
     async fn get_amends_internal(&self, order_id: &Id) -> Result<Vec<AmendOrderEvent>> {
-        let filter = |e: &AmendOrderEvent| order_id == &e.order_id;
-        self.get_filtered_dex_events(filter).await
+        self.get_dex_events()
+            .await?
+            .filter(|e: &Result<AmendOrderEvent>| {
+                if let Ok(e) = e {
+                    e.order_id == *order_id
+                } else {
+                    false
+                }
+            })
+            .collect()
     }
 
     /// Fetch amend order events for a given order ID.
@@ -680,8 +693,16 @@ impl LaminarClient {
     ///
     /// * `book_id` - `OrderBook` Id.
     pub async fn fetch_all_cancel_events(&self, book_id: &Id) -> Result<Vec<CancelOrderEvent>> {
-        let filter = |e: &CancelOrderEvent| &e.book_id == book_id;
-        self.get_filtered_dex_events(filter).await
+        self.get_dex_events()
+            .await?
+            .filter(|e: &Result<CancelOrderEvent>| {
+                if let Ok(e) = e {
+                    e.book_id == *book_id
+                } else {
+                    false
+                }
+            })
+            .collect()
     }
 
     /// Fetch cancel order event for a given order ID.
@@ -691,12 +712,20 @@ impl LaminarClient {
     /// * `order_id` - ID of order to fetch cancel event for.
     pub async fn get_cancel_event(&self, order_id: &Id) -> Result<Option<CancelOrderEvent>> {
         let res = self
-            .get_dex_events::<CancelOrderEvent>()
+            .get_dex_events()
             .await?
-            .iter()
-            .find(|e| order_id == &e.order_id)
-            .cloned();
-        Ok(res)
+            .find(|e: &Result<CancelOrderEvent>| {
+                if let Ok(e) = e {
+                    e.order_id == *order_id
+                } else {
+                    false
+                }
+            });
+
+        match res {
+            Some(Ok(e)) => Ok(Some(e)),
+            _ => Ok(None),
+        }
     }
 
     /// Fetch all fill events for this client's account for all orders
@@ -705,13 +734,29 @@ impl LaminarClient {
     ///
     /// * `book_id` - `OrderBook` Id.
     pub async fn fetch_all_fill_events(&self, book_id: &Id) -> Result<Vec<FillEvent>> {
-        let filter = |e: &FillEvent| &e.book_id == book_id;
-        self.get_filtered_dex_events(filter).await
+        self.get_dex_events()
+            .await?
+            .filter(|e: &Result<FillEvent>| {
+                if let Ok(e) = e {
+                    e.book_id == *book_id
+                } else {
+                    false
+                }
+            })
+            .collect()
     }
 
     async fn get_fills_internal(&self, order_id: &Id) -> Result<Vec<FillEvent>> {
-        let filter = |e: &FillEvent| order_id == &e.order_id;
-        self.get_filtered_dex_events(filter).await
+        self.get_dex_events()
+            .await?
+            .filter(|e: &Result<FillEvent>| {
+                if let Ok(e) = e {
+                    e.order_id == *order_id
+                } else {
+                    false
+                }
+            })
+            .collect()
     }
 
     /// Fetch fill events for a given order ID.
