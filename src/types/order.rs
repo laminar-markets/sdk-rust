@@ -37,7 +37,7 @@ impl FromStr for Id {
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         let (addr, num) = s.split_once(':').context("invalid ID string")?;
         Ok(Self {
-            creation_num: U64::from(num.parse::<u64>()?),
+            creation_num: num.parse::<u64>()?.into(),
             addr: addr.parse()?,
         })
     }
